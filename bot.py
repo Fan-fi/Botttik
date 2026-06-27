@@ -8,7 +8,7 @@ from aiogram.enums import ChatMemberStatus
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # ---------- КОНФИГ ----------
-TOKEN = "8397741728:AAHkiT4YZxFKMbydL7P02WMVNiRLfM5tsys"
+TOKEN = ""
 OWNER_ID = 1930961190  # твой Telegram ID
 DB_NAME = "shop_bot.db"
 # ----------------------------
