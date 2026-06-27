@@ -16,7 +16,6 @@ DB_NAME = "shop_bot.db"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ---------- БАЗА ДАННЫХ ----------
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("""
@@ -78,7 +77,7 @@ async def cmd_start(message: types.Message):
         "Привет! Я бот-магазин.\n"
         "/shop — посмотреть товары\n"
         "/balance — мой баланс\n"
-        "Админы могут добавлять товары и начислять ебланкоины."
+        "Админы могут добавлять товары, начислять/списывать ебланкоины и смотреть топ."
     )
 
 @dp.message(Command("balance"))
@@ -140,22 +139,58 @@ async def cmd_add_balance(message: types.Message):
         await message.answer("Эту команду нужно выполнять в группе, ответив на сообщение пользователя.")
         return
     if not await is_admin(message.chat.id, message.from_user.id):
-        await message.reply("Только администраторы могут пополнять баланс.")
+        await message.reply("Только администраторы могут изменять баланс.")
         return
     if not message.reply_to_message:
-        await message.reply("Ответьте на сообщение пользователя, которому нужно начислить ебланкоины.\nПример: `/add_balance 100`")
+        await message.reply("Ответьте на сообщение пользователя, которому нужно изменить баланс.\nПримеры:\n`/add_balance 100` — начислить\n`/add_balance -50` — списать")
         return
 
     target = message.reply_to_message.from_user
     try:
         amount = int(message.text.split()[1])
     except (IndexError, ValueError):
-        await message.reply("Укажите сумму: `/add_balance 100`")
+        await message.reply("Укажите число (можно отрицательное): `/add_balance 100` или `/add_balance -50`")
         return
 
     await add_user(target.id, target.username, target.first_name)
     await change_balance(target.id, amount)
-    await message.reply(f"✅ Пользователю {target.full_name} начислено {amount} ебланкоин.")
+
+    if amount > 0:
+        action_text = f"начислено {amount} ебланкоин"
+    elif amount < 0:
+        action_text = f"списано {-amount} ебланкоин"
+    else:
+        action_text = "баланс не изменился (0)"
+
+    await message.reply(f"✅ Пользователю {target.full_name} {action_text}.")
+
+@dp.message(Command("top"))
+async def cmd_top(message: types.Message):
+    # Только в группе, только админам
+    if message.chat.type == "private":
+        await message.answer("Эту команду можно использовать только в группе.")
+        return
+    if not await is_admin(message.chat.id, message.from_user.id):
+        await message.reply("Только администраторы могут смотреть топ.")
+        return
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute(
+            "SELECT user_id, username, first_name, balance FROM users WHERE balance != 0 ORDER BY balance DESC LIMIT 10"
+        )
+        top_users = await cursor.fetchall()
+
+    if not top_users:
+        await message.reply("Пока никто не имеет ебланкоинов.")
+        return
+
+    lines = ["🏆 Топ по балансу ебланкоинов:"]
+    for i, (user_id, username, first_name, balance) in enumerate(top_users, 1):
+        name = username if username else first_name
+        if not name:
+            name = f"ID:{user_id}"
+        lines.append(f"{i}. {name} — {balance} ебланкоин")
+    await message.reply("\n".join(lines))
 
 @dp.message(Command("add_item"))
 async def cmd_add_item(message: types.Message):
@@ -236,3 +271,4 @@ async def main():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
+
